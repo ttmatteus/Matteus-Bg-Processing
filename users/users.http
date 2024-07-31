@@ -1,3 +1,8 @@
 ### seed
 
 POST http://localhost:3000/users/seed
+
+
+### process
+
+POST http://localhost:3000/users/process

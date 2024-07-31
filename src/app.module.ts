@@ -6,7 +6,7 @@ import { BullModule } from '@nestjs/bull';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ScheduleModule } from '@nestjs/schedule';
 import { UsersModule } from 'users/user.modules';
- // Importa o UsersModule
+import { ProcessTrackingModule } from './process-tracking/process-tracking.entityts';
 
 @Module({
   imports: [
@@ -33,10 +33,17 @@ import { UsersModule } from 'users/user.modules';
         url: config.get('POSTGRES_URL'),
         autoLoadEntities: true,
         synchronize: true, // N usar isso em produção, sempre deixar em false
+        extra: {
+          min: 10,
+          max: 50,
+          idleTimeoutMillis: 3000,
+          connectionTimeoutMillis: 2000,
+        },
       }),
     }),
     ScheduleModule.forRoot(),
-    UsersModule, // Adiciona o UsersModule aqui
+    UsersModule,
+    ProcessTrackingModule,
   ],
   controllers: [AppController],
   providers: [AppService],

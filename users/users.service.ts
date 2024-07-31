@@ -10,7 +10,7 @@ export class UsersService {
         private readonly userRepository: Repository<User>
     ) {}
 
-    async seedDatabase(totalSize = 500_000, batchSize = 1000) {
+    async seedDatabase(totalSize = 500_000, batchSize = 1000): Promise<{ message: string, count: number }> {
         let count = 0;
 
         for (const batch of this.generateUsers(totalSize, batchSize, count)) {
@@ -19,6 +19,8 @@ export class UsersService {
             console.log(`Inserted ${count} users`);
         }
         console.log('Database seeding completed');
+
+        return { message: 'Database seeding completed', count };
     }
 
     private *generateUsers(totalSize: number, batchSize: number, initialCount: number) {

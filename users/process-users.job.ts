@@ -1,5 +1,5 @@
 import { InjectQueue, Process, Processor } from "@nestjs/bull";
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { Cron, CronExpression } from "@nestjs/schedule";
 import { Queue } from 'bull'; 
 import { DataSource } from "typeorm";
@@ -20,56 +20,64 @@ type UserRecord = {
 @Injectable()
 @Processor(QUEUE_NAME)
 export class ProcessUsersJob {
+    private readonly logger = new Logger(ProcessUsersJob.name);
+
     constructor(
         private readonly dataSource: DataSource,
         @InjectQueue(QUEUE_NAME)
         private readonly queue: Queue,
     ) {}
 
-    @Cron(CronExpression.EVERY_DAY_AT_3PM)
+    @Cron(CronExpression.EVERY_DAY_AT_3AM)
     async run() {
-        // Adiciona um job na fila
-        // Buscar x registros
-        // Processar
-        // Agendar a próxima execução
         await this.queue.add(JOB_NAME);
+        this.logger.log('Initial job added to the queue');
     }
 
     @Process(JOB_NAME)
-    async process() {
-        // Logic para processar o job
-        const batch = await this.queryBatach();
-        await this.processBatch(batch);
+    protected async process() {
+        this.logger.log('Processing started');
+        const batch = await this.queryBatch();
 
+        await this.processBatch(batch);
+        
         if (batch.length === BATCH_SIZE) {
-            await this.queue.add(JOB_NAME), { delay: BATCH_DELAY };
+            await this.queue.add(JOB_NAME, { delay: BATCH_DELAY });
+            this.logger.log(`More entries to process, scheduling next job with ${BATCH_DELAY}ms delay`);
         }
     }
     
-    private async queryBatach() {
+    private async queryBatch() {
+        this.logger.log('Querying batch');
         return this.dataSource.query<UserRecord[]>(
-            `select id, status from users where status = 'peding' limit ${BATCH_SIZE} for update skip locked`
+            `SELECT id, status FROM users WHERE status = 'pending' LIMIT ${BATCH_SIZE} FOR UPDATE SKIP LOCKED`,
         );
     }
 
     private async processBatch(batch: UserRecord[]) {
+        this.logger.log(`Processing batch of ${batch.length} records`);
         for (let i = 0; i < batch.length; i += SLICE_SIZE) {
-            const slice = batch.slice(i, i + SLICE_SIZE)
+            const slice = batch.slice(i, i + SLICE_SIZE);
             const results = await Promise.allSettled(
                 slice.map((record) => this.processRecord(record))
             );
+            results.forEach((result, index) => {
+                if (result.status === 'rejected') {
+                    this.logger.error(`Error processing record ${slice[index].id}: ${result.reason}`);
+                }
+            });
         }
+        this.logger.log('Batch processed');
     }
 
     private async processRecord(record: UserRecord) {
-        await new Promise ((resolve) => 
-            setTimeout(resolve, Math.random() * (500 - 200) + 200),
-        );
+        this.logger.log(`Processing record ${record.id}`);
+        await this.dataSource.manager.update(User, record.id, { status: 'processed' });
+
+        await new Promise((resolve) => setTimeout(resolve, Math.random() * (500 - 200) + 200));
         if (Math.random() < 0.1) {
             throw new Error('Random error');
         }
-        await this.dataSource.manager.update(User, record.id, {
-            status: 'processed',
-        });
+        await this.dataSource.manager.update(User, record.id, { status: 'processed' });
     }
 }
